@@ -178,7 +178,7 @@ const remapDataToTwoDimensionalMatrix = (data, strideSize, tickCount) => {
  * @param {number}          minDecibels     dB amount that matches value 0 in data (Uint8).
  * @param {number}          maxDecibels     dB amount that matches value 255 in data (Uint8).
  */
-const createChannel = (chart, channelIndex, rows, columns, maxFreq, duration, minDecibels, maxDecibels) => {
+const createChannel = (chart, channelIndex, rows, columns, maxFreq, duration, minDecibels, maxDecibels, addToLegend) => {
     const theme = chart.getTheme()
 
     // Define function that maps Uint8 [0, 255] to Decibels.
@@ -197,6 +197,13 @@ const createChannel = (chart, channelIndex, rows, columns, maxFreq, duration, mi
     }
     const yAxis = chart.addAxisY({ iStack: 1 - channelIndex }).setMargins(channelIndex < 1 ? 5 : 0, channelIndex > 0 ? 5 : 0)
     // Create the series
+    const lut = new LUT({
+        steps: regularColorSteps(0, 255, theme.examples.spectrogramColorPalette, {
+            formatLabels: (value) => `${Math.round(intensityDataToDb(value))}`,
+        }),
+        units: 'dB',
+        interpolate: true,
+    })
     const series = chart
         .addHeatmapGridSeries({
             yAxis,
@@ -212,13 +219,7 @@ const createChannel = (chart, channelIndex, rows, columns, maxFreq, duration, mi
         // Use palletted fill style, intensity values define the color for each data point based on the LUT
         .setFillStyle(
             new PalettedFill({
-                lut: new LUT({
-                    steps: regularColorSteps(0, 255, theme.examples.spectrogramColorPalette, {
-                        formatLabels: (value) => `${Math.round(intensityDataToDb(value))}`,
-                    }),
-                    units: 'dB',
-                    interpolate: true,
-                }),
+                lut,
             }),
         )
         .setWireframeStyle(emptyLine)
@@ -229,6 +230,8 @@ const createChannel = (chart, channelIndex, rows, columns, maxFreq, duration, mi
         .setTitle(`Channel ${channelIndex + 1}`)
         .setUnits('Hz')
         .setScrollStrategy(AxisScrollStrategies.fitting)
+
+    if (addToLegend) chart.legend.add(lut, {lutLength: 250})
 
     return {
         series,
@@ -243,6 +246,7 @@ const createChannel = (chart, channelIndex, rows, columns, maxFreq, duration, mi
 const renderSpectrogram = async (data) => {
     const chart = lc
         .ChartXY({
+            legend: {addEntriesAutomatically: false},
             theme: Themes[new URLSearchParams(window.location.search).get('theme') || 'darkGold'] || undefined,
         })
         .setTitle('Spectrogram chart 2 channels')
@@ -266,6 +270,7 @@ const renderSpectrogram = async (data) => {
             data.duration,
             data.channelDbRanges[i].minDecibels,
             data.channelDbRanges[i].maxDecibels,
+            i === 0,
         )
         // Setup the data for the chart
         const remappedData = remapDataToTwoDimensionalMatrix(data.channels[i], data.stride, data.tickCount)
@@ -279,16 +284,6 @@ const renderSpectrogram = async (data) => {
             values: remappedData,
         })
     }
-
-    // Add LegendBox.
-    const legend = chart
-        .addLegendBox()
-        .add(chart)
-        // Dispose example UI elements automatically if they take too much space. This is to avoid bad UI on mobile / etc. devices.
-        .setAutoDispose({
-            type: 'max-width',
-            maxWidth: 0.3,
-        })
 }
 
 ;(async () => {
